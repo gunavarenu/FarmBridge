@@ -148,7 +148,8 @@ export default function Navbar({ lang, setLang, cart, currentPage, setPage, user
                     {user.role === 'founder' ? '👑 Founder' : `(${user.role || 'farmer'})`}
                   </span>
                 </div>
-                <button className="lang-btn" onClick={onLogout} title="Logout" style={{ marginLeft: '4px' }}>↩</button>
+                                <button className="lang-btn" onClick={() => go('profile')} title="My Profile" style={{ marginLeft: '4px' }}>👤</button>
+                                <button className="lang-btn" onClick={onLogout} title="Logout" style={{ marginLeft: '4px' }}>↩</button>
               </div>
             : <button className="nav-login-btn" onClick={onLoginClick}>📱 {lang === 'en' ? 'Login' : 'लॉगिन'}</button>
           }

@@ -65,8 +65,9 @@ export default function ProductCard({ product, lang, onAddToCart, isBuyer }: Pro
 
         <div className="product-actions">
           <button className="btn-add-cart" onClick={() => onAddToCart(product)}>🛒 {t.addToCart}</button>
-          <a href={`tel:${product.farmerPhone}`} className="btn-contact">📞 {t.contactFarmer}</a>
-        </div>
+{product.farmerPhone
+  ? <a href={`tel:${product.farmerPhone}`} className="btn-contact">📞 {t.contactFarmer}</a>
+  : <span className="btn-contact" style={{ opacity: 0.6, cursor: 'default' }}>🔒 Login to contact</span>}        </div>
       </div>
     </div>
   )

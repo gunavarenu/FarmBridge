@@ -140,8 +140,8 @@ export async function fetchMandiRates(opts: {
     return result.length ? result : getFilteredFallback(state, commodity)
   }
 
-  const apiKey = import.meta.env.VITE_DATA_GOV_KEY as string
-  if (!apiKey) return getFilteredFallback(state, commodity)
+    const devKey = import.meta.env.DEV ? (import.meta.env.VITE_DATA_GOV_KEY as string) : ''
+    if (import.meta.env.DEV && !devKey) return getFilteredFallback(state, commodity)
 
   try {
     const params = new URLSearchParams({
@@ -152,7 +152,7 @@ export async function fetchMandiRates(opts: {
     })
 
     const url = import.meta.env.DEV
-      ? `/api-proxy/resource/9ef84268-d588-465a-a308-a864a43d0070?api-key=${apiKey}&${params}`
+      ? `/api-proxy/resource/9ef84268-d588-465a-a308-a864a43d0070?api-key=${devKey}&${params}`
       : `/api/mandi?${params}`
 
     const res = await fetch(url, { signal: AbortSignal.timeout(8000) })

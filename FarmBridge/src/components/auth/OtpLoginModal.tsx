@@ -1,6 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { requestOtp, confirmOtp, signInWithGoogle } from '../../services/authService'
-import { isAdminPhone } from '../../config/adminConfig'
+import { requestOtp, confirmOtp, saveProfile, signInWithGoogle } from '../../services/authService'
 import { supabase } from '../../config/supabaseClient'
 import type { AuthUser, Language } from '../../types'
 
@@ -71,6 +70,7 @@ export default function OtpLoginModal({ isOpen, onClose, onSuccess, lang }: Prop
   const [error,     setError]     = useState('')
   const [countdown, setCountdown] = useState(0)
   const [dbStatus,  setDbStatus]  = useState<DbStatus>('checking')
+  const [consent, setConsent] = useState(false)
   const refs = useRef<(HTMLInputElement | null)[]>([])
 
   const [profileName, setProfileName] = useState('')
@@ -83,10 +83,7 @@ export default function OtpLoginModal({ isOpen, onClose, onSuccess, lang }: Prop
   const [gpsLoading,  setGpsLoading]  = useState(false)
   const [gpsError,    setGpsError]    = useState('')
 
-  const isFounder = isAdminPhone(phone)
-  // True whenever there is no live OTP service or the DB is unreachable
-  const isMockMode = !import.meta.env.VITE_OTP_API_URL || dbStatus !== 'connected'
-
+  
   // Check DB connection status
   useEffect(() => {
     if (!isOpen) return
@@ -113,12 +110,14 @@ export default function OtpLoginModal({ isOpen, onClose, onSuccess, lang }: Prop
       setStep('phone'); setPhone(''); setOtp(['','','','','','']); setError('')
       setProfileName(''); setRole('farmer'); setVillage(''); setTaluka('')
       setDistrict(''); setState('Maharashtra'); setBirthDate(''); setGpsError('')
+      setConsent(false)
     }
   }, [isOpen])
 
   if (!isOpen) return null
 
   async function handleSend() {
+    if (!consent) { setError('Please accept the privacy notice to continue.'); return }
     setError(''); setLoading(true)
     const { error: err } = await requestOtp(phone)
     setLoading(false)
@@ -138,28 +137,28 @@ export default function OtpLoginModal({ isOpen, onClose, onSuccess, lang }: Prop
   }
 
   async function handleVerify() {
-    const code = otp.join('')
-    if (code.length < 6) { setError('Enter all 6 digits.'); return }
-    setError(''); setLoading(true)
-    const { user, error: err } = await confirmOtp(phone, code)
-    setLoading(false)
-    if (err || !user) { setError(err ?? 'Verification failed.'); return }
-    if (user.role === 'founder') { onSuccess(user); onClose(); return }
-    if (user.name) { onSuccess(user); onClose() } else { setStep('profile') }
-  }
+  const code = otp.join('')
+  if (code.length < 6) { setError('Enter all 6 digits.'); return }
+  setError(''); setLoading(true)
+  const { user, needsProfile, error: err } = await confirmOtp(phone, code)
+  setLoading(false)
+  if (err || !user) { setError(err ?? 'Verification failed.'); return }
+  if (needsProfile) { setStep('profile'); return }
+  onSuccess(user); onClose()
+}
 
-  async function handleProfileSubmit() {
-    if (!profileName.trim()) { setError('Please enter your full name.'); return }
-    if (!district.trim())    { setError('Please enter your district.'); return }
-    if (!birthDate)          { setError('Please enter your date of birth.'); return }
-    setError(''); setLoading(true)
-    const code = otp.join('')
-    const { user, error: err } = await confirmOtp(phone, code, { name: profileName, role, village, taluka, district, state, birthDate })
-    setLoading(false)
-    if (err || !user) { setError(err ?? 'Failed to register profile.'); return }
-    onSuccess(user); onClose()
-  }
-
+async function handleProfileSubmit() {
+  if (!profileName.trim()) { setError('Please enter your full name.'); return }
+  if (!district.trim())    { setError('Please enter your district.'); return }
+  if (!birthDate)          { setError('Please enter your date of birth.'); return }
+  const cutoff = new Date(); cutoff.setFullYear(cutoff.getFullYear() - 18)
+  if (new Date(birthDate) > cutoff) { setError('You must be 18 or older to register.'); return }
+  setError(''); setLoading(true)
+  const { user, error: err } = await saveProfile(phone, { name: profileName.trim(), role, village, taluka, district, state })
+  setLoading(false)
+  if (err || !user) { setError(err ?? 'Failed to register profile.'); return }
+  onSuccess(user); onClose()
+}
   async function handleGoogleLogin() {
     setGoogleLoading(true); setError('')
     const { error: err } = await signInWithGoogle()
@@ -295,7 +294,7 @@ export default function OtpLoginModal({ isOpen, onClose, onSuccess, lang }: Prop
               <div style={{ marginBottom: '14px' }}>
                 <label style={LBL}>🎂 Date of Birth *</label>
                 <input style={{ ...INP, cursor: 'pointer' }} type="date"
-                  max={new Date(new Date().setFullYear(new Date().getFullYear() - 10)).toISOString().split('T')[0]}
+                  max={new Date(new Date().setFullYear(new Date().getFullYear() - 18)).toISOString().split('T')[0]}
                   min="1940-01-01"
                   value={birthDate} onChange={e => setBirthDate(e.target.value)}
                   onFocus={e => { e.target.style.borderColor = '#40916c'; e.target.style.boxShadow = '0 0 0 3px rgba(64,145,108,0.12)' }}
@@ -484,7 +483,10 @@ export default function OtpLoginModal({ isOpen, onClose, onSuccess, lang }: Prop
                   <div style={{ padding: '12px', display: 'flex', alignItems: 'center', color: '#22c55e', fontSize: '18px' }}>✓</div>
                 )}
               </div>
-
+              <label style={{ display: 'flex', gap: '8px', alignItems: 'flex-start', fontSize: '12px', color: '#4b5563', marginBottom: '12px', lineHeight: 1.5 }}>
+              <input type="checkbox" checked={consent} onChange={e => setConsent(e.target.checked)} style={{ marginTop: '2px' }} />
+              <span>I agree that FarmBridge may collect my name, mobile number and location to run my account, and may show my mobile number to buyers/farmers so they can contact me. See Privacy Policy in the footer.</span>
+              </label>
               {error && <p style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '8px', padding: '8px 12px', fontSize: '12px', color: '#dc2626', fontWeight: 600, marginBottom: '12px', textAlign: 'center' }}>⚠ {error}</p>}
 
               <button

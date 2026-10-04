@@ -23,6 +23,7 @@ import AdminDashboard      from './components/features/AdminDashboard'
 import FarmerInfoPanel     from './components/features/FarmerInfoPanel'
 import MandiComparison     from './components/features/MandiComparison'
 import BestBuyerSuggestion from './components/features/BestBuyerSuggestion'
+import PolicyPage          from './components/PolicyPage' 
 import { supabase }         from './config/supabaseClient'
 import './App.css'
 
@@ -146,8 +147,7 @@ export default function App() {
       {/* ── Demo / Offline banner ── */}
       {demoBar && (
         <div className="demo-bar">
-          <span>⚠ Offline Mode — using demo data &nbsp;|&nbsp; OTP: <strong>123456</strong></span>
-          <button className="demo-bar-close" onClick={() => {
+         <span>⚠ Offline Mode — some features may be unavailable</span>          <button className="demo-bar-close" onClick={() => {
             setDemoBar(false)
             sessionStorage.setItem('dismissDemoBar', 'true')
           }}>✕</button>
@@ -180,6 +180,7 @@ export default function App() {
             {page === 'farmerinfo'  && <FarmerInfoPanel      lang={lang} onAddToCart={addToCart} />}
             {page === 'mandi'       && <MandiComparison      lang={lang} />}
             {page === 'bestbuyer'   && <BestBuyerSuggestion  lang={lang} />}
+            {page === 'privacy'     && <PolicyPage />}
           </div>
         )}
       </main>

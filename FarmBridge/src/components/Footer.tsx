@@ -152,8 +152,8 @@ export default function Footer({ lang, setPage }: FooterProps) {
           <div className="footer-made-in">
             {t.madeIn}
           </div>
-          <div className="footer-bottom-links">
-            <a href="#privacy" onClick={(e) => { e.preventDefault(); alert(t.privacy) }}>{t.privacy}</a>
+            <div className="footer-bottom-links">
+            <a href="#privacy" onClick={(e) => { e.preventDefault(); setPage('privacy') }}>{t.privacy}</a>
             <span className="link-divider">•</span>
             <a href="#terms" onClick={(e) => { e.preventDefault(); alert(t.terms) }}>{t.terms}</a>
           </div>

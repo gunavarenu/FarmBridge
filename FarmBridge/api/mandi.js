@@ -2,10 +2,10 @@
 // This runs server-side so CORS is never an issue.
 export default async function handler(req, res) {
   const { state, limit = '8' } = req.query
-  const apiKey = process.env.VITE_DATA_GOV_KEY
+  const apiKey = process.env.DATA_GOV_KEY
 
   if (!apiKey) {
-    res.status(500).json({ error: 'VITE_DATA_GOV_KEY not set in Vercel env vars' })
+    res.status(500).json({ error: 'DATA_GOV_KEY not set in Vercel env vars' })
     return
   }
 
@@ -25,6 +25,6 @@ export default async function handler(req, res) {
     res.setHeader('Cache-Control', 's-maxage=300, stale-while-revalidate=600')
     res.status(upstream.status).json(json)
   } catch (err) {
-    res.status(502).json({ error: 'Failed to fetch from data.gov.in', detail: String(err) })
+    res.status(500).json({ error: 'Failed to fetch mandi prices' })
   }
 }

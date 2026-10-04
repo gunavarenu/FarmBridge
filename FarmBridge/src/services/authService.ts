@@ -1,8 +1,6 @@
 import { supabase } from '../config/supabaseClient'
-import { isAdminPhone } from '../config/adminConfig'
 import type { AuthUser } from '../types'
 
-const OTP_API = import.meta.env.VITE_OTP_API_URL as string
 
 export interface FarmerProfileData {
   id: string
@@ -21,181 +19,55 @@ export interface FarmerProfileData {
   role: 'farmer' | 'buyer' | 'founder'
 }
 
-export async function requestOtp(phone: string): Promise<{ error?: string }> {
+ export async function requestOtp(phone: string): Promise<{ error?: string }> {
   const e164 = toE164(phone)
   if (!e164) return { error: 'Enter a valid 10-digit Indian mobile number.' }
-  
-  if (!OTP_API) {
-    console.log(`[DEV OTP] Mocking OTP send to ${e164}. Verification code is: 123456`)
-    return {}
-  }
-
-  try {
-    const res = await fetch(`${OTP_API}/send`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ phone: e164 }),
-    })
-    if (!res.ok) return { error: 'Failed to send OTP. Try again.' }
-    return {}
-  } catch {
-    return { error: 'Network error. Check your connection.' }
-  }
+  if (!supabase) return { error: 'Service unavailable. Try again later.' }
+  const { error } = await supabase.auth.signInWithOtp({ phone: e164 })
+  return error ? { error: 'Failed to send OTP. Try again.' } : {}
 }
 
 export async function confirmOtp(
-  phone: string, 
-  code: string,
-  registerProfile?: {
-    name: string
-    role: 'farmer' | 'buyer'
-    village: string
-    taluka: string
-    district: string
-    state: string
-    birthDate: string
-  }
-): Promise<{ user?: AuthUser; error?: string }> {
+  phone: string,
+  code: string
+): Promise<{ user?: AuthUser; needsProfile?: boolean; error?: string }> {
   const e164 = toE164(phone)
   if (!e164) return { error: 'Invalid phone number.' }
-
-  const isFounder = isAdminPhone(phone)
-
-  if (!OTP_API) {
-    if (code !== '123456') {
-      return { error: 'Incorrect OTP. Use 123456 in demo mode.' }
-    }
-    
-    const resolvedRole = isFounder ? 'founder' : (registerProfile?.role ?? 'farmer')
-    const resolvedName = registerProfile?.name ?? (isFounder ? 'Siddhesh Patil (Founder)' : '')
-
-    // Try to persist to Supabase, but fall back gracefully if unavailable
-    if (supabase) {
-      try {
-        const fakeEmail = `${e164.replace('+', '')}@farmbridge.local`
-        const fakePassword = 'FarmPassword123!'
-        
-        let { data, error } = await supabase.auth.signInWithPassword({
-          email: fakeEmail,
-          password: fakePassword,
-        })
-        
-        if (error && (error.message.includes('Invalid login credentials') || error.message.includes('Email not confirmed'))) {
-          const signUpRes = await supabase.auth.signUp({
-            email: fakeEmail,
-            password: fakePassword,
-          })
-          data = signUpRes.data as any
-          error = signUpRes.error
-        }
-
-        if (!error && data?.user) {
-          const userId = data.user.id
-          
-          await supabase.from('farmers').upsert(
-            { 
-              id: userId, 
-              name: resolvedName,
-              phone: e164, 
-              village: registerProfile?.village ?? (isFounder ? 'Pune' : ''),
-              taluka: registerProfile?.taluka ?? '',
-              district: registerProfile?.district ?? (isFounder ? 'Pune' : ''),
-              state: registerProfile?.state ?? 'Maharashtra',
-              birth_date: registerProfile?.birthDate || null,
-              bio: isFounder 
-                ? 'Founder & CEO of FarmBridge — connecting farmers directly with buyers.' 
-                : (resolvedRole === 'buyer' ? 'Buyer / Merchant profile' : ''),
-              farm_size_acres: 0,
-              experience: 0,
-              avatar_url: isFounder ? '👑' : (resolvedRole === 'buyer' ? '🏪' : '👨‍🌾'),
-              role: resolvedRole
-            },
-            { onConflict: 'id', ignoreDuplicates: false }
-          ).then(({ error: upsertErr }) => {
-            if (upsertErr) console.warn('Profile upsert warning:', upsertErr.message)
-          })
-
-          return { 
-            user: { 
-              id: userId, 
-              phone: e164, 
-              name: resolvedName,
-              role: resolvedRole
-            } 
-          }
-        }
-      } catch (networkErr) {
-        // Supabase unreachable (e.g. wrong key version, CORS, offline) — fall through to demo user
-        console.warn('[FarmBridge] Supabase unreachable, using local demo session:', (networkErr as Error).message)
-      }
-    }
-
-    // Demo / offline fallback — always succeeds
-    return { 
-      user: { 
-        id: 'demo-' + Date.now(), 
-        phone: e164, 
-        name: resolvedName,
-        role: resolvedRole
-      } 
-    }
+  if (!supabase) return { error: 'Service unavailable. Try again later.' }
+  const { data, error } = await supabase.auth.verifyOtp({ phone: e164, token: code, type: 'sms' })
+  if (error || !data.user) return { error: 'Incorrect or expired OTP.' }
+  const { data: farmer } = await supabase
+    .from('farmers').select('name, role').eq('id', data.user.id).maybeSingle()
+  return {
+    user: { id: data.user.id, phone: e164, name: farmer?.name ?? '', role: (farmer?.role ?? 'farmer') as AuthUser['role'] },
+    needsProfile: !farmer?.name,
   }
+}
 
-  try {
-    const res = await fetch(`${OTP_API}/verify`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ phone: e164, code }),
-    })
-    const body = await res.json()
-    if (!res.ok || !body.valid) return { error: 'Incorrect OTP. Please try again.' }
+export async function saveProfile(
+  phone: string,
+  p: { name: string; role: 'farmer' | 'buyer'; village: string; taluka: string; district: string; state: string }
+): Promise<{ user?: AuthUser; error?: string }> {
+  const e164 = toE164(phone)
+  if (!e164 || !supabase) return { error: 'Service unavailable.' }
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: 'Session expired. Please log in again.' }
+  const { error } = await supabase.from('farmers').upsert({
+    id: user.id, name: p.name, phone: e164, village: p.village, taluka: p.taluka,
+    district: p.district, state: p.state, role: p.role,
+    avatar_url: p.role === 'buyer' ? '🏪' : '👨‍🌾',
+    consent_at: new Date().toISOString(), consent_version: '2026-10-v1',
+  }, { onConflict: 'id' })
+  if (error) return { error: error.message }
+  return { user: { id: user.id, phone: e164, name: p.name, role: p.role } }
+}
 
-    if (supabase) {
-      const fakeEmail = `${e164.replace('+', '')}@farmbridge.local`
-      const fakePassword = 'FarmPassword123!'
-      
-      let { data, error } = await supabase.auth.signInWithPassword({
-        email: fakeEmail,
-        password: fakePassword,
-      })
-      
-      if (error && error.message.includes('Invalid login credentials')) {
-        const signUpRes = await supabase.auth.signUp({
-          email: fakeEmail,
-          password: fakePassword,
-        })
-        data = signUpRes.data as any
-        error = signUpRes.error
-      }
-
-      if (error) return { error: error.message }
-      const userId = data.user!.id
-
-      const resolvedRole = isFounder ? 'founder' : (registerProfile?.role ?? 'farmer')
-      
-      await supabase.from('farmers').upsert(
-        { 
-          id: userId, 
-          name: registerProfile?.name ?? (isFounder ? 'Siddhesh Patil (Founder)' : ''), 
-          phone: e164, 
-          village: registerProfile?.village ?? '', 
-          taluka: registerProfile?.taluka ?? '',
-          district: registerProfile?.district ?? '', 
-          state: registerProfile?.state ?? 'Maharashtra',
-          birth_date: registerProfile?.birthDate || null,
-          role: resolvedRole,
-          avatar_url: isFounder ? '👑' : (resolvedRole === 'buyer' ? '🏪' : '👨‍🌾')
-        },
-        { onConflict: 'id', ignoreDuplicates: false }
-      )
-      return { user: { id: userId, phone: e164, name: registerProfile?.name ?? '', role: resolvedRole } }
-    }
-
-    const resolvedRole = isFounder ? 'founder' : (registerProfile?.role ?? 'farmer')
-    return { user: { id: 'demo-' + Date.now(), phone: e164, name: registerProfile?.name ?? '', role: resolvedRole } }
-  } catch {
-    return { error: 'Network error. Try again.' }
-  }
+export async function deleteMyAccount(): Promise<{ error?: string }> {
+  if (!supabase) return { error: 'Service unavailable.' }
+  const { error } = await supabase.functions.invoke('delete-account')
+  if (error) return { error: error.message }
+  await supabase.auth.signOut()
+  return {}
 }
 
 export async function signOut(): Promise<void> {
@@ -246,8 +118,7 @@ export async function getCurrentUser(): Promise<AuthUser | null> {
 
     return { 
       id: data.user.id, 
-      phone: data.user.phone ?? farmer?.phone ?? '',
-      name: farmer?.name ?? '',
+      phone: farmer?.phone || (data.user.phone ? '+' + data.user.phone : ''),      name: farmer?.name ?? '',
       role: farmer?.role as any
     }
   } catch (err) {
@@ -301,7 +172,6 @@ export async function updateFarmerProfile(profile: Partial<FarmerProfileData> & 
     if (profile.bio !== undefined) updateData.bio = profile.bio
     if (profile.farmSizeAcres !== undefined) updateData.farm_size_acres = profile.farmSizeAcres
     if (profile.experience !== undefined) updateData.experience = profile.experience
-    if (profile.role !== undefined) updateData.role = profile.role
 
     const { error } = await supabase
       .from('farmers')

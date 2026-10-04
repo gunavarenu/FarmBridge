@@ -6,7 +6,7 @@
  */
 import { useState, useEffect } from 'react'
 import type { Language, AuthUser, Product } from '../../types'
-import { getFarmerProfile, updateFarmerProfile, type FarmerProfileData } from '../../services/authService'
+import { getFarmerProfile, updateFarmerProfile, deleteMyAccount, type FarmerProfileData } from '../../services/authService'
 import { getMarketplaceProducts } from '../../services/productService'
 import { logUserActivity } from '../../services/activityService'
 
@@ -203,7 +203,12 @@ export default function FarmerProfile({ lang, onAddToCart, user }: Props) {
 
   const fp = profile || DEFAULT_PROFILE
   const displayBio = fp.bio || (lang === 'hi' ? 'कोई विवरण नहीं उपलब्ध है।' : lang === 'mr' ? 'कोणतीही माहिती उपलब्ध नाही.' : 'No bio provided.')
-
+  const handleDeleteAccount = async () => {
+    if (!confirm('Permanently delete your account and personal data? This cannot be undone.')) return
+    const { error } = await deleteMyAccount()
+    if (error) { alert(error); return }
+    window.location.href = '/'
+  }
   return (
     <div className="profile-page">
       {/* Hero banner */}
@@ -219,10 +224,15 @@ export default function FarmerProfile({ lang, onAddToCart, user }: Props) {
             </div>
           </div>
           <div className="profile-actions">
-            {user && fp.id === user.id && (
-              <button className="btn-gps" onClick={() => { setIsEditing(!isEditing); setErrorMsg(''); setSuccessMsg('') }} style={{ background: 'var(--primary-50)', color: 'var(--primary-800)', border: '1px solid var(--primary-200)' }}>
-                {isEditing ? '✕ Cancel' : '⚙️ Edit Profile'}
-              </button>
+                {user && fp.id === user.id && (
+              <>
+                <button className="btn-gps" onClick={() => { setIsEditing(!isEditing); setErrorMsg(''); setSuccessMsg('') }} style={{ background: 'var(--primary-50)', color: 'var(--primary-800)', border: '1px solid var(--primary-200)' }}>
+                  {isEditing ? '✕ Cancel' : '⚙️ Edit Profile'}
+                </button>
+                <button className="btn-gps" onClick={handleDeleteAccount} style={{ background: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca' }}>
+                  🗑 Delete my account
+                </button>
+              </>
             )}
             <a href={`tel:${fp.phone}`} className="btn-primary">📞 {T.call}</a>
             <a href={`https://wa.me/91${fp.phone}?text=Hello ${fp.name}, I found your profile on FarmBridge. I want to discuss a purchase.`}
@@ -412,4 +422,4 @@ export default function FarmerProfile({ lang, onAddToCart, user }: Props) {
       )}
     </div>
   )
-}
+}

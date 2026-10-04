@@ -310,8 +310,7 @@ export default function AdminDashboard({ user }: Props) {
               FarmBridge Admin Panel
             </h1>
             <p style={{ margin: '4px 0 0', color: 'rgba(245,158,11,0.6)', fontSize: '13px' }}>
-              Founder Dashboard · {user?.name || 'Siddhesh Patil'} · +91 {user?.phone?.replace('+91', '') || '8080218122'}
-            </p>
+            Founder Dashboard · {user?.name || 'Founder'} · +91 {user?.phone?.replace('+91', '') || ''}            </p>
           </div>
         </div>
         <button
